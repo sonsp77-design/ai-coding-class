@@ -332,13 +332,12 @@
 </div>
 
 <script>
-    // ★★★ Supabase 설정 (Apps Script 대체) ★★★
-    const SUPABASE_URL = "https://prlonmttupmpag শারীরিকqvecj.supabase.co"; 
-    // ※ 주의: 프롬프트에 제공된 URL 중 일부(prlonmttupmpagbqvecj)가 필터링에 걸릴 수 있어 정확히 입력해 주세요.
+    // ★★★ Supabase 설정 (변수명 db로 수정 완료!) ★★★
+    const SUPABASE_URL = "https://prlonmttupmpagbqvecj.supabase.co"; 
     const SUPABASE_KEY = "sb_publishable_X7tSiDkiiJMbDatMdVcePA_l_WzPyiM";
-    const supabase = supabase.createClient("https://prlonmttupmpagbqvecj.supabase.co", SUPABASE_KEY);
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     
-    const ADMIN_PASSWORD = "1416"; // 기존 앱스크립트에 있던 비밀번호
+    const ADMIN_PASSWORD = "1416"; 
 
     // [DATA] 공휴일 DB
     const HOLIDAY_DB = {
@@ -387,13 +386,9 @@
 
     function showLoading(show) { document.getElementById('loading').style.display = show ? 'flex' : 'none'; }
 
-    // =====================================
-    // DB 데이터 불러오기 (초기 세팅)
-    // =====================================
     async function fetchSettings() {
         try {
-            // 1. Config 가져오기
-            const { data: config } = await supabase.from('config').select('*').eq('id', 1).single();
+            const { data: config } = await db.from('config').select('*').eq('id', 1).single();
             if (config) {
                 eduRange = { start: config.edu_start || "", end: config.edu_end || "" };
                 appRange = { 
@@ -411,12 +406,10 @@
                 document.getElementById('adminLimitDisplay').innerText = (appLimit > 0) ? appLimit : "∞";
             }
 
-            // 2. 차단된 날짜 가져오기
-            const { data: blocks } = await supabase.from('blocked_dates').select('blocked_date');
+            const { data: blocks } = await db.from('blocked_dates').select('blocked_date');
             if (blocks) blockedDates = blocks.map(b => b.blocked_date);
 
-            // 3. 신청된 데이터(점유일, 카운트) 가져오기
-            const { data: apps } = await supabase.from('applications').select('schedule_date');
+            const { data: apps } = await db.from('applications').select('schedule_date');
             if (apps) {
                 occupiedDates = apps.map(a => a.schedule_date);
                 document.getElementById('adminCount').innerText = apps.length;
@@ -430,9 +423,6 @@
         }
     }
 
-    // =====================================
-    // UI 업데이트 및 달력 렌더링
-    // =====================================
     function updateStatusIndicator() {
         const div = document.getElementById('statusIndicator');
         const now = new Date(); 
@@ -505,9 +495,6 @@
     }
     function closeModal() { document.getElementById('customModal').classList.remove('show'); }
     
-    // =====================================
-    // 사용자: 신청하기 로직 (DB Insert)
-    // =====================================
     async function processSubmission() {
         closeModal();
         showLoading(true);
@@ -515,25 +502,21 @@
         const p = currentPriorities[0];
 
         try {
-            // 제한 인원 체크
-            const { count } = await supabase.from('applications').select('*', { count: 'exact', head: true });
+            const { count } = await db.from('applications').select('*', { count: 'exact', head: true });
             if (appLimit > 0 && count >= appLimit) {
                 alert("신청이 마감되었습니다.\n(제한 인원 초과)");
                 showLoading(false); return;
             }
 
-            // 중복 방지 (기존 삭제 후 등록)
-            await supabase.from('applications').delete().match({ affiliation: data.aff, name: data.name, phone: data.tel });
+            await db.from('applications').delete().match({ affiliation: data.aff, name: data.name, phone: data.tel });
 
-            // 등록
-            const { error } = await supabase.from('applications').insert([{
+            const { error } = await db.from('applications').insert([{
                 affiliation: data.aff, position: data.pos, name: data.name, phone: data.tel, schedule_date: p.date, schedule_time: p.time
             }]);
 
             if (error) throw error;
             showLoading(false);
             
-            // 완료 화면
             let summaryHtml = `
                 <div style="line-height:1.6; margin-bottom:10px;">
                     <strong>소속:</strong> ${data.aff}<br>
@@ -555,9 +538,6 @@
         }
     }
 
-    // =====================================
-    // 사용자: 내역 확인 / 수정 / 취소
-    // =====================================
     async function checkMyStatus() {
         const aff = document.getElementById('uAff').value; const name = document.getElementById('uName').value; const tel = document.getElementById('uTel').value;
         if(!aff || !name || tel.length < 12) return alert("정보 입력 필요");
@@ -566,7 +546,7 @@
         currentUserData = {aff, name, tel};
         
         try {
-            const { data } = await supabase.from('applications').select('*').match({ affiliation: aff, name: name, phone: tel }).single();
+            const { data } = await db.from('applications').select('*').match({ affiliation: aff, name: name, phone: tel }).single();
             showLoading(false);
             
             if (data) {
@@ -598,7 +578,7 @@
         if(!confirm("신청 마감 인원 반영에 따라 수정 신청이 안될 수 있습니다.\n수정하시겠습니까?\n(확인 시 기존 내역은 즉시 삭제되며 다시 신청해야 합니다.)")) return;
         closeStatusModal(); showLoading(true);
         
-        await supabase.from('applications').delete().match({ affiliation: currentUserData.aff, name: currentUserData.name, phone: currentUserData.tel });
+        await db.from('applications').delete().match({ affiliation: currentUserData.aff, name: currentUserData.name, phone: currentUserData.tel });
         
         fetchSettings().then(() => {
             showLoading(false);
@@ -622,7 +602,7 @@
         if(!confirm("정말 신청을 취소하시겠습니까?\n취소 후에는 복구할 수 없습니다.")) return;
         closeStatusModal(); showLoading(true);
         
-        await supabase.from('applications').delete().match({ affiliation: currentUserData.aff, name: currentUserData.name, phone: currentUserData.tel });
+        await db.from('applications').delete().match({ affiliation: currentUserData.aff, name: currentUserData.name, phone: currentUserData.tel });
         
         fetchSettings().then(() => {
             showLoading(false); alert("취소되었습니다.");
@@ -642,8 +622,8 @@
 
         showLoading(true);
         try {
-            const { data } = await supabase.from('applications').select('*').match({ affiliation: aff, name: name, phone: tel }).single();
-            const { count } = await supabase.from('applications').select('*', { count: 'exact', head: true });
+            const { data } = await db.from('applications').select('*').match({ affiliation: aff, name: name, phone: tel }).single();
+            const { count } = await db.from('applications').select('*', { count: 'exact', head: true });
             
             showLoading(false);
             if(data) {
@@ -657,7 +637,6 @@
                 document.getElementById('userStep1').classList.remove('active'); document.getElementById('userStep2').classList.add('active'); 
             }
         } catch (e) {
-            // No data found means new user
             showLoading(false); currentPriorities=[]; 
             document.getElementById('userStep1').classList.remove('active'); document.getElementById('userStep2').classList.add('active');
         }
@@ -670,7 +649,7 @@
         if(!confirm("신청 마감 인원 반영에 따라 수정 신청이 안될 수 있습니다. 수정하시겠습니까?")) return;
         showLoading(true);
         const aff = document.getElementById('uAff').value; const name = document.getElementById('uName').value; const tel = document.getElementById('uTel').value;
-        await supabase.from('applications').delete().match({ affiliation: aff, name: name, phone: tel });
+        await db.from('applications').delete().match({ affiliation: aff, name: name, phone: tel });
         
         fetchSettings().then(() => {
             showLoading(false);
@@ -678,9 +657,6 @@
         });
     }
     
-    // =====================================
-    // 관리자 기능
-    // =====================================
     function openAdminAuth() { 
         const pw = prompt("PW:");
         if(pw === ADMIN_PASSWORD) { 
@@ -700,7 +676,7 @@
     async function refreshAdminData() {
         if(!adminToken) return;
         showLoading(true);
-        const { data: apps } = await supabase.from('applications').select('*').order('created_at', { ascending: false });
+        const { data: apps } = await db.from('applications').select('*').order('created_at', { ascending: false });
         showLoading(false);
         if(apps) {
             adminDataCache = apps;
@@ -713,7 +689,7 @@
         const val = document.getElementById('adminAppLimit').value;
         if(val === "") return alert("숫자를 입력하세요.");
         showLoading(true);
-        await supabase.from('config').update({ app_limit: val }).eq('id', 1);
+        await db.from('config').update({ app_limit: val }).eq('id', 1);
         appLimit = val; document.getElementById('adminLimitDisplay').innerText = (val > 0) ? val : "∞";
         showLoading(false); alert("저장됨");
     }
@@ -721,12 +697,11 @@
     async function adminSaveTitleInfo() {
         const m = document.getElementById('adminMainTitle').value; const s = document.getElementById('adminSubTitle').value;
         showLoading(true);
-        await supabase.from('config').update({ main_title: m, sub_title: s }).eq('id', 1);
+        await db.from('config').update({ main_title: m, sub_title: s }).eq('id', 1);
         document.getElementById('mainTitle').innerText = m; document.getElementById('subTitle').innerText = s;
         showLoading(false); alert("저장됨");
     }
 
-    // 관리자 달력 렌더링
     function renderAdminCalendar() {
         const grid = document.getElementById('adminCalGrid'); grid.innerHTML = "";
         document.getElementById('adminCalMonthYear').innerText = `${adminCalYear}년 ${adminCalMonth + 1}월`;
@@ -762,7 +737,7 @@
         
         showLoading(true);
         const inserts = adminSelectedDates.map(d => ({ blocked_date: d }));
-        await supabase.from('blocked_dates').insert(inserts);
+        await db.from('blocked_dates').insert(inserts);
         
         adminSelectedDates = []; 
         fetchSettings().then(() => { showLoading(false); alert("차단되었습니다."); });
@@ -777,7 +752,7 @@
         
         showLoading(true);
         for(let cb of checkboxes) {
-            await supabase.from('applications').delete().eq('id', cb.getAttribute('data-id'));
+            await db.from('applications').delete().eq('id', cb.getAttribute('data-id'));
         }
         alert("삭제되었습니다."); refreshAdminData(); fetchSettings(); 
     }
@@ -788,7 +763,7 @@
     
     async function saveAppPeriodToServer(s,e){ 
         showLoading(true);
-        await supabase.from('config').update({ app_start: s ? s.replace('T', ' ')+':00' : null, app_end: e ? e.replace('T', ' ')+':00' : null }).eq('id', 1);
+        await db.from('config').update({ app_start: s ? s.replace('T', ' ')+':00' : null, app_end: e ? e.replace('T', ' ')+':00' : null }).eq('id', 1);
         appRange={start:s, end:e}; document.getElementById('adminAppStart').value=s; document.getElementById('adminAppEnd').value=e; document.getElementById('adminExtendEnd').value=e; 
         updateStatusIndicator(); showLoading(false); alert("저장됨");
     }
@@ -801,7 +776,7 @@
     async function toggleForceClose(c){ 
         if(confirm("변경?")){ 
             showLoading(true); 
-            await supabase.from('config').update({ is_force_closed: c }).eq('id', 1);
+            await db.from('config').update({ is_force_closed: c }).eq('id', 1);
             isForceClosed=c; updateForceCloseUI(); updateStatusIndicator(); showLoading(false);
         } 
     }
@@ -809,7 +784,7 @@
     async function adminSaveEduRange(){ 
         const s=document.getElementById('adminEduStart').value, e=document.getElementById('adminEduEnd').value; 
         showLoading(true); 
-        await supabase.from('config').update({ edu_start: s, edu_end: e }).eq('id', 1);
+        await db.from('config').update({ edu_start: s, edu_end: e }).eq('id', 1);
         eduRange={start:s, end:e}; showLoading(false); alert("저장됨");
     }
     
@@ -855,7 +830,7 @@
 
         showLoading(true);
         const inserts = holidays.map(d => ({ blocked_date: d }));
-        await supabase.from('blocked_dates').insert(inserts).select().catch(e=>console.log(e)); // 중복무시용
+        await db.from('blocked_dates').insert(inserts).select().catch(e=>console.log(e)); 
         
         fetchSettings().then(() => { showLoading(false); alert("등록 완료"); });
     }
@@ -863,14 +838,14 @@
     async function adminClearAllBlocks() {
         if(!confirm("모든 차단 날짜 삭제?")) return;
         showLoading(true);
-        await supabase.from('blocked_dates').delete().neq('blocked_date', '1900-01-01'); // 꼼수: 모두 삭제
+        await db.from('blocked_dates').delete().neq('blocked_date', '1900-01-01'); 
         fetchSettings().then(() => { showLoading(false); alert("해제됨"); });
     }
 
     async function adminRemoveBlock(date) {
         if(confirm(date + " 해제?")) { 
             showLoading(true);
-            await supabase.from('blocked_dates').delete().eq('blocked_date', date);
+            await db.from('blocked_dates').delete().eq('blocked_date', date);
             fetchSettings().then(() => { showLoading(false); });
         }
     }
@@ -879,5 +854,3 @@
         target.value = target.value.replace(/[^0-9]/g, '').replace(/^(\d{0,3})(\d{0,4})(\d{0,4})$/g, "$1-$2-$3").replace(/(\-{1,2})$/g, "");
     }
 </script>
-</body>
-</html>
